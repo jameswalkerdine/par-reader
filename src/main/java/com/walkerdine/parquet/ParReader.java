@@ -17,7 +17,9 @@ import org.apache.parquet.tools.read.SimpleRecord;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,12 +36,14 @@ public class ParReader implements  Runnable {
 
         ParquetReader<SimpleRecord> reader = null;
         try {
+            String loc2 = "c:/tmp/expected.parquet";
+            String loc = "/home/james/testdata/expected.parquet";
             Configuration conf = new Configuration();
-            Path inputPath = new Path("c:/tmp/expected.parquet");
+            Path inputPath = new Path(loc);
             reader = ParquetReader.builder(new SimpleReadSupport(), inputPath).build();
-            // FileStatus inputFileStatus = new Path("/home/james/uber/uber2.parquet/part-r-00000-9850f367-b3e8-41ba-8d44-1cc7f471a032.snappy.parquet").getFileSystem(conf).getFileStatus(inputPath);
+            // FileStatus inputFileStatus = new Path().getFileSystem(conf).getFileStatus(inputPath);
             ParquetFileReader fr = ParquetFileReader.open(new Configuration(), inputPath);
-            FileStatus inputFileStatus = new Path("c:/tmp/expected.parquet").getFileSystem(conf).getFileStatus(inputPath);
+            FileStatus inputFileStatus = new Path(loc).getFileSystem(conf).getFileStatus(inputPath);
 
 
             List<Footer> footers = ParquetFileReader.readFooters(new Configuration(), inputFileStatus, false);
@@ -64,7 +68,7 @@ public class ParReader implements  Runnable {
 
 
             for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
-                getFields(value, "");
+                addRecord(value, "");
                 System.out.println(value);
             }
         } catch (Exception e) {
@@ -79,6 +83,35 @@ public class ParReader implements  Runnable {
         }
 
     }
+
+
+    void addRecord(SimpleRecord.NameValue value, String root) {
+        if (value.getValue() instanceof String) {
+            addValueFor(root + "-" + value.getName(), value.getValue());
+        } else {
+            if (value.getValue() instanceof SimpleRecord) {
+                SimpleRecord sm = (SimpleRecord) value.getValue();
+                for (SimpleRecord.NameValue v : sm.getValues()) {
+                    addRecord(v, root + "-" + v.getName());
+                }
+            }
+        }
+    }
+
+    void addRecord(SimpleRecord value, String root) {
+        for( SimpleRecord.NameValue nv : value.getValues())  {
+            addRecord(nv, root);
+        }
+    }
+
+    private void addValueFor(String s, Object value) {
+        System.out.println(s + "  " + value);
+
+    }
+
+
+
+    private Map<String, Set<String>> nameValueSets = new ConcurrentHashMap<>(1000);
 
     private Set<String> getFields(Object value, String root) {
         Set<String> result = new HashSet();
