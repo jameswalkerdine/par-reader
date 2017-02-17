@@ -68,9 +68,10 @@ public class ParReader implements  Runnable {
 
 
             for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
-                addRecord(value, "");
+                addRecord(value, "event");
                 System.out.println(value);
             }
+            System.out.println("here");
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -87,12 +88,21 @@ public class ParReader implements  Runnable {
 
     void addRecord(SimpleRecord.NameValue value, String root) {
         if (value.getValue() instanceof String) {
-            addValueFor(root + "-" + value.getName(), value.getValue());
+            addValueFor(root + "-" + value.getName(), (String)value.getValue());
         } else {
             if (value.getValue() instanceof SimpleRecord) {
                 SimpleRecord sm = (SimpleRecord) value.getValue();
                 for (SimpleRecord.NameValue v : sm.getValues()) {
-                    addRecord(v, root + "-" + v.getName());
+
+                    String s = "";
+                    if( root.length() >0) {
+                        s = root;
+                    }
+                    if( !(v.getName().equalsIgnoreCase("bag") || v.getName().equalsIgnoreCase("array") || v.getValue() instanceof  String)) {
+                        s = s + "-" + v.getName();
+                    }
+
+                    addRecord(v, s);
                 }
             }
         }
@@ -104,8 +114,14 @@ public class ParReader implements  Runnable {
         }
     }
 
-    private void addValueFor(String s, Object value) {
+    private void addValueFor(String s, String value) {
         System.out.println(s + "  " + value);
+
+
+
+        Set<String> valueSet = nameValueSets.getOrDefault(s, new HashSet<String>());
+        valueSet.add(value);
+        nameValueSets.put(s, valueSet);
 
     }
 
