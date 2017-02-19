@@ -67,11 +67,20 @@ public class ParReader implements  Runnable {
             }
 
 
+            // need to just read do calc ea row group not the whole file
             for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
                 addRecord(value, "event");
-                System.out.println(value);
+                //System.out.println(value);
             }
-            System.out.println("here");
+            System.out.println("values");
+            for( Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
+                System.out.println("values for ["+ entry.getKey() +"]");
+                for(String value: entry.getValue()) {
+                    System.out.print(value + ",");
+                }
+                System.out.println();
+
+            }
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -119,7 +128,7 @@ public class ParReader implements  Runnable {
 
 
 
-        Set<String> valueSet = nameValueSets.getOrDefault(s, new HashSet<String>());
+        Set<String> valueSet = nameValueSets.getOrDefault(s, new HashSet<String>(255));
         valueSet.add(value);
         nameValueSets.put(s, valueSet);
 
