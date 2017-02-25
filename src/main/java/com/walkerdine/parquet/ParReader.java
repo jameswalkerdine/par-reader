@@ -1,20 +1,40 @@
 package com.walkerdine.parquet;
 
+import org.apache.commons.lang.reflect.FieldUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.column.page.DictionaryPageReadStore;
+import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.io.compress.DecompressorStream;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.bytes.BytesInput;
+import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.ColumnReader;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.column.impl.ColumnReadStoreImpl;
+import org.apache.parquet.column.impl.ColumnReaderImpl;
+import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.values.dictionary.DictionaryValuesReader;
+import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridValuesReader;
+import org.apache.parquet.hadoop.CodecFactory;
 import org.apache.parquet.hadoop.Footer;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.hadoop.metadata.CompressionCodecName;
+import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
+import org.apache.parquet.tools.command.DumpCommand;
 import org.apache.parquet.tools.read.SimpleReadSupport;
 import org.apache.parquet.tools.read.SimpleRecord;
+import org.apache.parquet.column.values.plain.PlainValuesReader;
 //import org.apache.parquet.hadoop.DictionaryPageReader;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.System.out;
+
 
 public class ParReader implements  Runnable {
 
@@ -30,7 +52,7 @@ public class ParReader implements  Runnable {
         ExecutorService es = Executors.newSingleThreadExecutor();
         es.submit(new ParReader());
     }
-
+//TODO need to deal with morw than just strings endpoint2.port is an int for a start
     @Override
     public void run() {
 
@@ -52,12 +74,106 @@ public class ParReader implements  Runnable {
             for (Footer f : footers) {
                 List<BlockMetaData> blocks = f.getParquetMetadata().getBlocks();
                 for (BlockMetaData block : blocks) {
-                    System.out.println(block.toString());
+                    out.println(block.toString());
+                    Object dpr = fr.getDictionaryReader(block);
+
+                    List<ColumnChunkMetaData> cols = block.getColumns();
+                    ColumnPath pathKey = cols.get(13).getPath();
+                    Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
+                    ColumnDescriptor columnDescriptor = paths.get(pathKey);
+
+                    PageReadStore rowGroup = fr.readNextRowGroup();
+                    PageReader simpleCol = rowGroup.getPageReader(columnDescriptor);
+
+                    DataPage.Visitor visi = new DataPage.Visitor() {
+                        @Override
+                        public DataPage visit(DataPageV1 dataPageV1) {
+                            CodecFactory codecFactory = new CodecFactory(new Configuration(), 0);
+
+                            CodecFactory.BytesDecompressor decompressor = codecFactory.getDecompressor(CompressionCodecName.GZIP);
+
+                            RunLengthBitPackingHybridValuesReader rle = new RunLengthBitPackingHybridValuesReader(8);
+                            //PlainValuesReader.IntegerPlainValuesReader vr = new PlainValuesReader.IntegerPlainValuesReader.IntegerPlainValuesReader();
+                            PlainValuesReader.LongPlainValuesReader vr = new PlainValuesReader.LongPlainValuesReader.LongPlainValuesReader();
+
+                            try {
+                                rle.initFromPage(dataPageV1.getValueCount(), dataPageV1.getBytes().toByteArray(),0);
+                                System.out.println(rle.readInteger());
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+
+//                            try {
+//                                BytesInput nn = decompressor.decompress(dataPageV1.getBytes(), dataPageV1.getUncompressedSize());
+//                                System.out.println();
+//                            } catch (IOException e) {
+//                                e.printStackTrace();
+//                            }
+                            try {
+                                DataPageV1 xxx = new DataPageV1(
+                                        decompressor.decompress(dataPageV1.getBytes(), dataPageV1.getUncompressedSize()),
+                                        dataPageV1.getValueCount(),
+                                        dataPageV1.getUncompressedSize(),
+                                        dataPageV1.getStatistics(),
+                                        dataPageV1.getRlEncoding(),
+                                        dataPageV1.getDlEncoding(),
+                                        dataPageV1.getValueEncoding());
+
+                                return xxx;
+                            } catch (IOException e) {
+                                return null;
+
+                            }
+
+
+
+//                            BytesInput bytes2 = dataPageV1.getBytes();
+//                            try {
+//                                CodecFactory codecFactory = new CodecFactory(new Configuration(), 0);
+//                                DecompressorStream ds = (DecompressorStream)FieldUtils.readField(bytes2, "in", true);
+//                                System.out.println(ds);
+//                                Decompressor dec = (Decompressor)FieldUtils.readField(ds, "decompressor", true);
+//                                for(int x=1; x< dataPageV1.getValueCount(); x++) {
+//                                    int oops = decompress(bytes2.toByteArray(), 1, x);
+//                                    System.out.println(oops);
+//                                }
+//                                System.out.println(ds);
+//
+//                            } catch (IllegalAccessException e) {
+//                                e.printStackTrace();
+//                            } catch (IOException e) {
+//                                e.printStackTrace();
+//                            }printStackTrace
+                            //bytes2.in
+
+ //return null;
+                        }
+
+                        @Override
+                        public Binary visit(DataPageV2 dataPageV2) {
+                            return null;
+                        }
+                    };
+
+
+   //                 simpleCol.readPage().accept(visi);
+                    DictionaryPage dpp = simpleCol.readDictionaryPage();
+
+
+                    long xx = rowGroup.getRowCount();
+                    DictionaryPageReadStore dr = fr.getNextDictionaryReader();
+// fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor)
+                   //DictionaryPage pg = fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor);
+
+                    Dictionary dictionary = dpp.getEncoding().initDictionary(columnDescriptor, dpp);
+                   DictionaryValuesReader dvr = new DictionaryValuesReader(dictionary);
                     //DictionaryPageReader dpr = new DictionaryPageReader(reader, block)
                     //                DictionaryPageReadStore dpr = fr.getDictionaryReader( block);
                     //              System.out.println(dpr);
-
-                    System.out.println("start: " + block.getStartingPos() + "  end: "
+//dvr.initFromPage(pg.getDictionarySize(),);
+                    Binary x = dictionary.decodeToBinary(0);
+                    String g = x.toStringUsingUTF8();
+                    out.println("start: " + block.getStartingPos() + "  end: "
                             + (block.getStartingPos()
                             + block.getCompressedSize())
                             + "  rows: " + block.getRowCount());
@@ -66,19 +182,23 @@ public class ParReader implements  Runnable {
                 }
             }
 
-
+long start = System.currentTimeMillis();
             // need to just read do calc ea row group not the whole file
+            int n =0;
             for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
+                //n++;
                 addRecord(value, "event");
                 //System.out.println(value);
             }
-            System.out.println("values");
+           out.println("TT " + (System.currentTimeMillis() - start));
+
+            out.println("values");
             for( Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
-                System.out.println("values for ["+ entry.getKey() +"]");
+                out.println("values for ["+ entry.getKey() +"]");
                 for(String value: entry.getValue()) {
-                    System.out.print(value + ",");
+                    out.print(value + ",");
                 }
-                System.out.println();
+                out.println();
 
             }
         } catch (Exception e) {
@@ -124,7 +244,7 @@ public class ParReader implements  Runnable {
     }
 
     private void addValueFor(String s, String value) {
-        System.out.println(s + "  " + value);
+        out.println(s + "  " + value);
 
 
 
