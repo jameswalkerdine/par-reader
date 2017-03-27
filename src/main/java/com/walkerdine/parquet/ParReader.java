@@ -4,6 +4,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.column.page.DictionaryPageReadStore;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.Footer;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetReader;
@@ -35,6 +36,7 @@ public class ParReader implements  Runnable {
     public void run() {
 
         ParquetReader<SimpleRecord> reader = null;
+
         try {
             String loc2 = "c:/tmp/expected.parquet";
             String loc = "/home/james/testdata/expected.parquet";
@@ -45,8 +47,10 @@ public class ParReader implements  Runnable {
             ParquetFileReader fr = ParquetFileReader.open(new Configuration(), inputPath);
             FileStatus inputFileStatus = new Path(loc).getFileSystem(conf).getFileStatus(inputPath);
 
-
+            PageReadStore rg = fr.readNextRowGroup();
+rg.getPageReader()
             List<Footer> footers = ParquetFileReader.readFooters(new Configuration(), inputFileStatus, false);
+
             // f.getParquetMetadata().getFileMetaData().getSchema()
             Set<String> flds = getFields(footers.get(0).getParquetMetadata().getFileMetaData().getSchema());
             for (Footer f : footers) {
