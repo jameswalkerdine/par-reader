@@ -1,14 +1,26 @@
 package com.walkerdine.parquet;
 
+import org.apache.commons.lang.reflect.FieldUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.column.page.DictionaryPageReadStore;
-import org.apache.parquet.column.page.PageReadStore;
-import org.apache.parquet.hadoop.Footer;
-import org.apache.parquet.hadoop.ParquetFileReader;
-import org.apache.parquet.hadoop.ParquetReader;
+import org.apache.hadoop.io.compress.CompressionInputStream;
+import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.io.compress.Lz4Codec;
+import org.apache.hadoop.io.compress.lz4.Lz4Decompressor;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.bytes.BytesInput;
+import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.impl.ColumnReaderImpl;
+import org.apache.parquet.column.page.*;
+import org.apache.parquet.hadoop.*;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.io.ParquetDecodingException;
+import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.io.api.PrimitiveConverter;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
@@ -16,16 +28,44 @@ import org.apache.parquet.tools.read.SimpleReadSupport;
 import org.apache.parquet.tools.read.SimpleRecord;
 //import org.apache.parquet.hadoop.DictionaryPageReader;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 
+
 public class ParReader implements  Runnable {
+
+
+    class Vis implements DataPage.Visitor {
+
+
+
+        @Override
+        public Object visit(DataPageV1 dataPageV1) {
+            Decompressor lz = new DefaultCodec().createDecompressor();
+
+
+            try {
+                BytesInput bts = dataPageV1.getBytes();
+                InputStream is = bts.toInputStream();
+                int n = is.read();
+                int nn = lz.decompress(dataPageV1.getBytes().toByteArray(), 0, dataPageV1.getUncompressedSize());
+                return null;
+                //return new DataPageV1(lz.decompress(dataPageV1.getBytes().toByteArray(), 0, dataPageV1.getUncompressedSize()), dataPageV1.getValueCount(), dataPageV1.getUncompressedSize(), dataPageV1.getStatistics(), dataPageV1.getRlEncoding(), dataPageV1.getDlEncoding(), dataPageV1.getValueEncoding());
+            } catch (IOException var3) {
+                throw new ParquetDecodingException("could not decompress page", var3);
+            }
+        }
+
+        @Override
+        public Object visit(DataPageV2 dataPageV2) {
+            return null;
+        }
+    }
 
     public static void main(String[] args) {
         ExecutorService es = Executors.newSingleThreadExecutor();
@@ -48,9 +88,42 @@ public class ParReader implements  Runnable {
             FileStatus inputFileStatus = new Path(loc).getFileSystem(conf).getFileStatus(inputPath);
 
             PageReadStore rg = fr.readNextRowGroup();
-rg.getPageReader()
+            List<BlockMetaData> blocks2 = fr.getFooter().getBlocks();
+            BlockMetaData b = blocks2.get(0);
+
             List<Footer> footers = ParquetFileReader.readFooters(new Configuration(), inputFileStatus, false);
 
+
+            List<ColumnChunkMetaData> cols = b.getColumns();
+            ColumnPath pathKey = cols.get(0).getPath();
+            Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
+            ColumnDescriptor columnDescriptor = paths.get(pathKey);
+
+            PageReader x = rg.getPageReader(columnDescriptor);
+
+            //DataPage pg = x.readPage();
+
+            final List<String> actualValues = new ArrayList<String>();
+            PrimitiveConverter converter = new PrimitiveConverter() {
+                @Override
+                public void addBinary(Binary value) {
+                    actualValues.add(value.toStringUsingUTF8());
+                }
+            };
+
+            ColumnReaderImpl columnReader = new ColumnReaderImpl(
+                    columnDescriptor, x, converter,
+                    new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
+
+            while (actualValues.size() < columnReader.getTotalValueCount()) {
+                columnReader.writeCurrentValueToConverter();
+                columnReader.consume();
+            }
+
+
+            //rs = new org.apache.parquet.hadoop.ColumnChunkPageReadStore(pg.getValueCount());
+
+            //pg.accept(new Vis());
             // f.getParquetMetadata().getFileMetaData().getSchema()
             Set<String> flds = getFields(footers.get(0).getParquetMetadata().getFileMetaData().getSchema());
             for (Footer f : footers) {
