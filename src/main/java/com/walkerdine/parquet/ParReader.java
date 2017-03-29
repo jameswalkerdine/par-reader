@@ -15,6 +15,7 @@ import org.apache.parquet.column.impl.ColumnReadStoreImpl;
 import org.apache.parquet.column.impl.ColumnReaderImpl;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.dictionary.DictionaryValuesReader;
+import org.apache.parquet.column.values.dictionary.PlainValuesDictionary;
 import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridValuesReader;
 import org.apache.parquet.hadoop.CodecFactory;
 import org.apache.parquet.hadoop.Footer;
@@ -46,13 +47,14 @@ import java.util.concurrent.Executors;
 import static java.lang.System.out;
 
 
-public class ParReader implements  Runnable {
+public class ParReader implements Runnable {
 
     public static void main(String[] args) {
         ExecutorService es = Executors.newSingleThreadExecutor();
         es.submit(new ParReader());
     }
-//TODO need to deal with morw than just strings endpoint2.port is an int for a start
+
+    //TODO need to deal with morw than just strings endpoint2.port is an int for a start
     @Override
     public void run() {
 
@@ -61,11 +63,11 @@ public class ParReader implements  Runnable {
             String loc2 = "c:/tmp/expected.parquet";
             String loc = "/home/james/testdata/expected.parquet";
             Configuration conf = new Configuration();
-            Path inputPath = new Path(loc);
+            Path inputPath = new Path(loc2);
             reader = ParquetReader.builder(new SimpleReadSupport(), inputPath).build();
             // FileStatus inputFileStatus = new Path().getFileSystem(conf).getFileStatus(inputPath);
             ParquetFileReader fr = ParquetFileReader.open(new Configuration(), inputPath);
-            FileStatus inputFileStatus = new Path(loc).getFileSystem(conf).getFileStatus(inputPath);
+            FileStatus inputFileStatus = new Path(loc2).getFileSystem(conf).getFileStatus(inputPath);
 
 
             List<Footer> footers = ParquetFileReader.readFooters(new Configuration(), inputFileStatus, false);
@@ -97,7 +99,7 @@ public class ParReader implements  Runnable {
                             PlainValuesReader.LongPlainValuesReader vr = new PlainValuesReader.LongPlainValuesReader.LongPlainValuesReader();
 
                             try {
-                                rle.initFromPage(dataPageV1.getValueCount(), dataPageV1.getBytes().toByteArray(),0);
+                                rle.initFromPage(dataPageV1.getValueCount(), dataPageV1.getBytes().toByteArray(), 0);
                                 System.out.println(rle.readInteger());
                             } catch (IOException e) {
                                 e.printStackTrace();
@@ -126,7 +128,6 @@ public class ParReader implements  Runnable {
                             }
 
 
-
 //                            BytesInput bytes2 = dataPageV1.getBytes();
 //                            try {
 //                                CodecFactory codecFactory = new CodecFactory(new Configuration(), 0);
@@ -146,7 +147,7 @@ public class ParReader implements  Runnable {
 //                            }printStackTrace
                             //bytes2.in
 
- //return null;
+                            //return null;
                         }
 
                         @Override
@@ -156,23 +157,32 @@ public class ParReader implements  Runnable {
                     };
 
 
-   //                 simpleCol.readPage().accept(visi);
+                    //                 simpleCol.readPage().accept(visi);
                     DictionaryPage dpp = simpleCol.readDictionaryPage();
 
 
                     long xx = rowGroup.getRowCount();
                     DictionaryPageReadStore dr = fr.getNextDictionaryReader();
 // fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor)
-                   //DictionaryPage pg = fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor);
+                    //DictionaryPage pg = fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor);
 
                     Dictionary dictionary = dpp.getEncoding().initDictionary(columnDescriptor, dpp);
-                   DictionaryValuesReader dvr = new DictionaryValuesReader(dictionary);
+                    DictionaryValuesReader dvr = new DictionaryValuesReader(dictionary);
                     //DictionaryPageReader dpr = new DictionaryPageReader(reader, block)
                     //                DictionaryPageReadStore dpr = fr.getDictionaryReader( block);
                     //              System.out.println(dpr);
 //dvr.initFromPage(pg.getDictionarySize(),);
-                    Binary x = dictionary.decodeToBinary(0);
-                    String g = x.toStringUsingUTF8();
+
+                    for (int i = 0; i < dictionary.getMaxId(); i++) {
+                        if (dictionary instanceof PlainValuesDictionary.PlainLongDictionary) {
+                            Long l = dictionary.decodeToLong(i);
+                            out.println("next dictionary value: " + l);
+                        } else if (dictionary instanceof PlainValuesDictionary.PlainBinaryDictionary) {
+                            Binary x = dictionary.decodeToBinary(i);
+                            String g = x.toStringUsingUTF8();
+                            out.println("next dictionary value: " + g);
+                        }
+                    }
                     out.println("start: " + block.getStartingPos() + "  end: "
                             + (block.getStartingPos()
                             + block.getCompressedSize())
@@ -182,20 +192,20 @@ public class ParReader implements  Runnable {
                 }
             }
 
-long start = System.currentTimeMillis();
+            long start = System.currentTimeMillis();
             // need to just read do calc ea row group not the whole file
-            int n =0;
+            int n = 0;
             for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
                 //n++;
                 addRecord(value, "event");
                 //System.out.println(value);
             }
-           out.println("TT " + (System.currentTimeMillis() - start));
+            out.println("TT " + (System.currentTimeMillis() - start));
 
             out.println("values");
-            for( Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
-                out.println("values for ["+ entry.getKey() +"]");
-                for(String value: entry.getValue()) {
+            for (Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
+                out.println("values for [" + entry.getKey() + "]");
+                for (String value : entry.getValue()) {
                     out.print(value + ",");
                 }
                 out.println();
@@ -217,17 +227,17 @@ long start = System.currentTimeMillis();
 
     void addRecord(SimpleRecord.NameValue value, String root) {
         if (value.getValue() instanceof String) {
-            addValueFor(root + "-" + value.getName(), (String)value.getValue());
+            addValueFor(root + "-" + value.getName(), (String) value.getValue());
         } else {
             if (value.getValue() instanceof SimpleRecord) {
                 SimpleRecord sm = (SimpleRecord) value.getValue();
                 for (SimpleRecord.NameValue v : sm.getValues()) {
 
                     String s = "";
-                    if( root.length() >0) {
+                    if (root.length() > 0) {
                         s = root;
                     }
-                    if( !(v.getName().equalsIgnoreCase("bag") || v.getName().equalsIgnoreCase("array") || v.getValue() instanceof  String)) {
+                    if (!(v.getName().equalsIgnoreCase("bag") || v.getName().equalsIgnoreCase("array") || v.getValue() instanceof String)) {
                         s = s + "-" + v.getName();
                     }
 
@@ -238,7 +248,7 @@ long start = System.currentTimeMillis();
     }
 
     void addRecord(SimpleRecord value, String root) {
-        for( SimpleRecord.NameValue nv : value.getValues())  {
+        for (SimpleRecord.NameValue nv : value.getValues()) {
             addRecord(nv, root);
         }
     }
@@ -247,13 +257,11 @@ long start = System.currentTimeMillis();
         out.println(s + "  " + value);
 
 
-
         Set<String> valueSet = nameValueSets.getOrDefault(s, new HashSet<String>(255));
         valueSet.add(value);
         nameValueSets.put(s, valueSet);
 
     }
-
 
 
     private Map<String, Set<String>> nameValueSets = new ConcurrentHashMap<>(1000);
@@ -287,18 +295,21 @@ long start = System.currentTimeMillis();
 
     private Set<String> getf(Type t, String root) {
         Set<String> result = new HashSet<>();
-        if( t.isPrimitive()) {
-            if( root.isEmpty()) {
+        if (t.isPrimitive()) {
+            if (root.isEmpty()) {
                 result.add(t.getName());
             } else
-            result.add(root + "-" + t.getName());
+                result.add(root + "-" + t.getName());
         } else {
             GroupType gt = t.asGroupType();
-            for( Type nt : gt.getFields()) {
+            for (Type nt : gt.getFields()) {
                 String rooty;
-                if( root.isEmpty()) rooty = ""; else rooty = root + "-";
-                if( !gt.getName().equalsIgnoreCase("Bag") && !gt.getName().equalsIgnoreCase("Array"))  result.addAll(getf(nt, rooty+gt.getName()  ));
-                else {   result.addAll(getf(nt, root  ));
+                if (root.isEmpty()) rooty = "";
+                else rooty = root + "-";
+                if (!gt.getName().equalsIgnoreCase("Bag") && !gt.getName().equalsIgnoreCase("Array"))
+                    result.addAll(getf(nt, rooty + gt.getName()));
+                else {
+                    result.addAll(getf(nt, root));
                 }
             }
         }
