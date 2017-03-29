@@ -39,34 +39,6 @@ import java.util.concurrent.Executors;
 
 public class ParReader implements  Runnable {
 
-
-    class Vis implements DataPage.Visitor {
-
-
-
-        @Override
-        public Object visit(DataPageV1 dataPageV1) {
-            Decompressor lz = new DefaultCodec().createDecompressor();
-
-
-            try {
-                BytesInput bts = dataPageV1.getBytes();
-                InputStream is = bts.toInputStream();
-                int n = is.read();
-                int nn = lz.decompress(dataPageV1.getBytes().toByteArray(), 0, dataPageV1.getUncompressedSize());
-                return null;
-                //return new DataPageV1(lz.decompress(dataPageV1.getBytes().toByteArray(), 0, dataPageV1.getUncompressedSize()), dataPageV1.getValueCount(), dataPageV1.getUncompressedSize(), dataPageV1.getStatistics(), dataPageV1.getRlEncoding(), dataPageV1.getDlEncoding(), dataPageV1.getValueEncoding());
-            } catch (IOException var3) {
-                throw new ParquetDecodingException("could not decompress page", var3);
-            }
-        }
-
-        @Override
-        public Object visit(DataPageV2 dataPageV2) {
-            return null;
-        }
-    }
-
     public static void main(String[] args) {
         ExecutorService es = Executors.newSingleThreadExecutor();
         es.submit(new ParReader());
@@ -81,11 +53,11 @@ public class ParReader implements  Runnable {
             String loc2 = "c:/tmp/expected.parquet";
             String loc = "/home/james/testdata/expected.parquet";
             Configuration conf = new Configuration();
-            Path inputPath = new Path(loc);
+            Path inputPath = new Path(loc2);
             reader = ParquetReader.builder(new SimpleReadSupport(), inputPath).build();
             // FileStatus inputFileStatus = new Path().getFileSystem(conf).getFileStatus(inputPath);
             ParquetFileReader fr = ParquetFileReader.open(new Configuration(), inputPath);
-            FileStatus inputFileStatus = new Path(loc).getFileSystem(conf).getFileStatus(inputPath);
+            FileStatus inputFileStatus = new Path(loc2).getFileSystem(conf).getFileStatus(inputPath);
 
             PageReadStore rg = fr.readNextRowGroup();
             List<BlockMetaData> blocks2 = fr.getFooter().getBlocks();
@@ -95,7 +67,7 @@ public class ParReader implements  Runnable {
 
 
             List<ColumnChunkMetaData> cols = b.getColumns();
-            ColumnPath pathKey = cols.get(0).getPath();
+            ColumnPath pathKey = cols.get(13).getPath();
             Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
             ColumnDescriptor columnDescriptor = paths.get(pathKey);
 
