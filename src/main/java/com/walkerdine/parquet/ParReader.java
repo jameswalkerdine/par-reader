@@ -11,9 +11,11 @@ import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.lz4.Lz4Decompressor;
 import org.apache.parquet.VersionParser;
 import org.apache.parquet.bytes.BytesInput;
-import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.*;
 import org.apache.parquet.column.impl.ColumnReaderImpl;
 import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.values.dictionary.DictionaryValuesReader;
+import org.apache.parquet.column.values.dictionary.PlainValuesDictionary;
 import org.apache.parquet.hadoop.*;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
@@ -35,6 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.System.out;
 
 
 public class ParReader implements  Runnable {
@@ -67,32 +70,72 @@ public class ParReader implements  Runnable {
 
 
             List<ColumnChunkMetaData> cols = b.getColumns();
-            ColumnPath pathKey = cols.get(13).getPath();
+            ColumnPath pathKey = cols.get(23).getPath();
             Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
             ColumnDescriptor columnDescriptor = paths.get(pathKey);
 
+
+
             PageReader x = rg.getPageReader(columnDescriptor);
 
-            //DataPage pg = x.readPage();
+            if( x.readDictionaryPage() != null ) {
+                processDictionary(x, columnDescriptor);
+            } else {
 
-            final List<String> actualValues = new ArrayList<String>();
-            PrimitiveConverter converter = new PrimitiveConverter() {
-                @Override
-                public void addBinary(Binary value) {
-                    actualValues.add(value.toStringUsingUTF8());
+
+                //DataPage pg = x.readPage();
+
+                final List<String> actualValues = new ArrayList<String>();
+                PrimitiveConverter converter = new PrimitiveConverter() {
+                    @Override
+                    public void addBinary(Binary value) {
+                        actualValues.add(value.toStringUsingUTF8());
+                        System.out.println("nxt non dict value"  + value.toStringUsingUTF8());
+                    }
+
+                    @Override
+                    public void addBoolean(boolean value) {
+                        System.out.println("nxt non dict value"  + value);
+                        actualValues.add(new Boolean(value).toString());
+                    }
+
+                    @Override
+                    public void addDouble(double value) {
+                        System.out.println("nxt non dict value"  + value);
+                        actualValues.add(Double.toString(value));
+                    }
+
+                    @Override
+                    public void addFloat(float value) {
+                        System.out.println("nxt non dict value"  + value);
+                    }
+
+                    @Override
+                    public void addInt(int value) {
+                        System.out.println("nxt non dict value"  + value);
+                        actualValues.add(Integer.toString(value));
+
+                    }
+
+                    @Override
+                    public void addLong(long value) {
+                        System.out.println("nxt non dict value"  + value);
+                        actualValues.add(Long.toString(value));
+
+                    }
+                };
+
+                ColumnReaderImpl columnReader = new ColumnReaderImpl(
+                        columnDescriptor, x, converter,
+                        new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
+
+                while (actualValues.size() < columnReader.getTotalValueCount() ) {
+                    columnReader.writeCurrentValueToConverter();
+                    columnReader.consume();
                 }
-            };
 
-            ColumnReaderImpl columnReader = new ColumnReaderImpl(
-                    columnDescriptor, x, converter,
-                    new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
-
-            while (actualValues.size() < columnReader.getTotalValueCount()) {
-                columnReader.writeCurrentValueToConverter();
-                columnReader.consume();
             }
-
-
+            System.exit(1);
             //rs = new org.apache.parquet.hadoop.ColumnChunkPageReadStore(pg.getValueCount());
 
             //pg.accept(new Vis());
@@ -114,6 +157,7 @@ public class ParReader implements  Runnable {
 
                 }
             }
+
 
 
             // need to just read do calc ea row group not the whole file
@@ -142,6 +186,42 @@ public class ParReader implements  Runnable {
         }
 
     }
+
+
+    void processDictionary(PageReader pageReader, ColumnDescriptor columnDescriptor) {
+
+        DictionaryPage dpp = pageReader.readDictionaryPage();
+
+
+        //long xx = rowGroup.getRowCount();
+        //DictionaryPageReadStore dr = fr.getNextDictionaryReader();
+// fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor)
+        //DictionaryPage pg = fr.getDictionaryReader(block).readDictionaryPage(columnDescriptor);
+
+        org.apache.parquet.column.Dictionary dictionary = null;
+        try {
+            dictionary = dpp.getEncoding().initDictionary(columnDescriptor, dpp);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        DictionaryValuesReader dvr = new DictionaryValuesReader(dictionary);
+        //DictionaryPageReader dpr = new DictionaryPageReader(reader, block)
+        //                DictionaryPageReadStore dpr = fr.getDictionaryReader( block);
+        //              System.out.println(dpr);
+//dvr.initFromPage(pg.getDictionarySize(),);
+
+        for (int i = 0; i < dictionary.getMaxId(); i++) {
+            if (dictionary instanceof PlainValuesDictionary.PlainLongDictionary) {
+                Long l = dictionary.decodeToLong(i);
+                out.println("next dictionary value: " + l);
+            } else if (dictionary instanceof PlainValuesDictionary.PlainBinaryDictionary) {
+                Binary x = dictionary.decodeToBinary(i);
+                String g = x.toStringUsingUTF8();
+                out.println("next dictionary value: " + g);
+            }
+        }
+    }
+
 
 
     void addRecord(SimpleRecord.NameValue value, String root) {
