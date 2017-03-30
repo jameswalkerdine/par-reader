@@ -22,6 +22,8 @@ import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.io.api.Converter;
+import org.apache.parquet.io.api.GroupConverter;
 import org.apache.parquet.io.api.PrimitiveConverter;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
@@ -70,7 +72,7 @@ public class ParReader implements  Runnable {
 
 
             List<ColumnChunkMetaData> cols = b.getColumns();
-            ColumnPath pathKey = cols.get(23).getPath();
+            ColumnPath pathKey = cols.get(5).getPath();
             Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
             ColumnDescriptor columnDescriptor = paths.get(pathKey);
 
@@ -85,49 +87,42 @@ public class ParReader implements  Runnable {
 
                 //DataPage pg = x.readPage();
 
-                final List<String> actualValues = new ArrayList<String>();
-                PrimitiveConverter converter = new PrimitiveConverter() {
+                GroupConverter groupConverter = new GroupConverter() {
                     @Override
-                    public void addBinary(Binary value) {
-                        actualValues.add(value.toStringUsingUTF8());
-                        System.out.println("nxt non dict value"  + value.toStringUsingUTF8());
+                    public Converter getConverter(int i) {
+                        return null;
                     }
 
                     @Override
-                    public void addBoolean(boolean value) {
-                        System.out.println("nxt non dict value"  + value);
-                        actualValues.add(new Boolean(value).toString());
-                    }
-
-                    @Override
-                    public void addDouble(double value) {
-                        System.out.println("nxt non dict value"  + value);
-                        actualValues.add(Double.toString(value));
-                    }
-
-                    @Override
-                    public void addFloat(float value) {
-                        System.out.println("nxt non dict value"  + value);
-                    }
-
-                    @Override
-                    public void addInt(int value) {
-                        System.out.println("nxt non dict value"  + value);
-                        actualValues.add(Integer.toString(value));
+                    public void start() {
 
                     }
 
                     @Override
-                    public void addLong(long value) {
-                        System.out.println("nxt non dict value"  + value);
-                        actualValues.add(Long.toString(value));
+                    public void end() {
 
                     }
                 };
 
+
+
+                final List<String> actualValues = new ArrayList<String>();
+
+
+                ExtendedPrimitiveConverter converter = new ExtendedPrimitiveConverter(actualValues) ;
+
+                QuickGroupConverter c2 = new QuickGroupConverter(null, 0,fr.getFileMetaData().getSchema() );
+
+
+
                 ColumnReaderImpl columnReader = new ColumnReaderImpl(
-                        columnDescriptor, x, converter,
+                        columnDescriptor, x, c2.asPrimitiveConverter(),
                         new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
+
+
+//                ColumnReaderImpl columnReader = new ColumnReaderImpl(
+//                        columnDescriptor, x, converter,
+//                        new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
 
                 while (actualValues.size() < columnReader.getTotalValueCount() ) {
                     columnReader.writeCurrentValueToConverter();
