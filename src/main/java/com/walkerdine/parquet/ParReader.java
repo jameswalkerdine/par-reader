@@ -52,14 +52,15 @@ public class ParReader implements  Runnable {
     @Override
     public void run() {
 
-        ParquetReader<SimpleRecord> reader = null;
+        //ParquetReader<SimpleRecord> reader = null;
 
         try {
-            String loc2 = "c:/tmp/expected.parquet";
+            //String loc2 = "c:/tmp/expected.parquet";
+            String loc2 = "c:/parquettestfiles/part-r-00001.gz.parquet";
             String loc = "/home/james/testdata/expected.parquet";
             Configuration conf = new Configuration();
             Path inputPath = new Path(loc2);
-            reader = ParquetReader.builder(new SimpleReadSupport(), inputPath).build();
+            //reader = ParquetReader.builder(new SimpleReadSupport(), inputPath).build();
             // FileStatus inputFileStatus = new Path().getFileSystem(conf).getFileStatus(inputPath);
             ParquetFileReader fr = ParquetFileReader.open(new Configuration(), inputPath);
             FileStatus inputFileStatus = new Path(loc2).getFileSystem(conf).getFileStatus(inputPath);
@@ -70,61 +71,56 @@ public class ParReader implements  Runnable {
 
             List<Footer> footers = ParquetFileReader.readFooters(new Configuration(), inputFileStatus, false);
 
-
             List<ColumnChunkMetaData> cols = b.getColumns();
-            ColumnPath pathKey = cols.get(5).getPath();
+            ColumnPath pathKey = cols.get(4).getPath();
             Map<ColumnPath, ColumnDescriptor> paths = (Map<ColumnPath, ColumnDescriptor>) FieldUtils.readField(fr, "paths", true);
             ColumnDescriptor columnDescriptor = paths.get(pathKey);
 
-
-
             PageReader x = rg.getPageReader(columnDescriptor);
 
-            if( x.readDictionaryPage() != null ) {
+            if (x.readDictionaryPage() != null) {
                 processDictionary(x, columnDescriptor);
             } else {
 
 
                 //DataPage pg = x.readPage();
 
-                GroupConverter groupConverter = new GroupConverter() {
-                    @Override
-                    public Converter getConverter(int i) {
-                        return null;
-                    }
-
-                    @Override
-                    public void start() {
-
-                    }
-
-                    @Override
-                    public void end() {
-
-                    }
-                };
-
+//                GroupConverter groupConverter = new GroupConverter() {
+//                    @Override
+//                    public Converter getConverter(int i) {
+//                        return null;
+//                    }
+//
+//                    @Override
+//                    public void start() {
+//
+//                    }
+//
+//                    @Override
+//                    public void end() {
+//
+//                    }
+//                };
 
 
                 final List<String> actualValues = new ArrayList<String>();
 
 
-                ExtendedPrimitiveConverter converter = new ExtendedPrimitiveConverter(actualValues) ;
+                ExtendedPrimitiveConverter converter = new ExtendedPrimitiveConverter(actualValues);
 
-                QuickGroupConverter c2 = new QuickGroupConverter(null, 0,fr.getFileMetaData().getSchema() );
-
-
-
-                ColumnReaderImpl columnReader = new ColumnReaderImpl(
-                        columnDescriptor, x, c2.asPrimitiveConverter(),
-                        new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
+                // QuickGroupConverter c2 = new QuickGroupConverter(null, 0,fr.getFileMetaData().getSchema() );
 
 
 //                ColumnReaderImpl columnReader = new ColumnReaderImpl(
-//                        columnDescriptor, x, converter,
+//                        columnDescriptor, x, c2.asPrimitiveConverter(),
 //                        new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
 
-                while (actualValues.size() < columnReader.getTotalValueCount() ) {
+
+                ColumnReaderImpl columnReader = new ColumnReaderImpl(
+                        columnDescriptor, x, converter,
+                        new VersionParser.ParsedVersion("parquet-mr", "1.6.0", "abcd"));
+
+                while (actualValues.size() < columnReader.getTotalValueCount()) {
                     columnReader.writeCurrentValueToConverter();
                     columnReader.consume();
                 }
@@ -156,29 +152,31 @@ public class ParReader implements  Runnable {
 
 
             // need to just read do calc ea row group not the whole file
-            for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
-                addRecord(value, "event");
-                //System.out.println(value);
-            }
-            System.out.println("values");
-            for( Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
-                System.out.println("values for ["+ entry.getKey() +"]");
-                for(String value: entry.getValue()) {
-                    System.out.print(value + ",");
-                }
-                System.out.println();
-
-            }
+//            for (SimpleRecord value = reader.read(); value != null; value = reader.read()) {
+//                addRecord(value, "event");
+//                //System.out.println(value);
+//            }
+//            System.out.println("values");
+//            for( Map.Entry<String, Set<String>> entry : nameValueSets.entrySet()) {
+//                System.out.println("values for ["+ entry.getKey() +"]");
+//                for(String value: entry.getValue()) {
+//                    System.out.print(value + ",");
+//                }
+//                System.out.println();
+//
+//            }
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (Exception ex) {
-                }
-            }
+//            if (reader != null) {
+//                try {
+//                    reader.close();
+//                } catch (Exception ex) {
+//                }
+//            }
+
         }
+
 
     }
 

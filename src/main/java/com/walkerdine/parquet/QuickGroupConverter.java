@@ -23,7 +23,7 @@ public class QuickGroupConverter extends GroupConverter {
         for(int i = 0; i < this.converters.length; ++i) {
             Type type = schema.getType(i);
             if(type.isPrimitive()) {
-                this.converters[i] = new ExtendedPrimitiveConverter(this, i);
+            //    this.converters[i] = new ExtendedPrimitiveConverter(this, i);
             } else {
                 this.converters[i] = new QuickGroupConverter(this, i, type.asGroupType());
             }

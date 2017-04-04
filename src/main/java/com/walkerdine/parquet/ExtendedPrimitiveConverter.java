@@ -21,9 +21,9 @@ class ExtendedPrimitiveConverter extends PrimitiveConverter {
         this.actualValues = actualValues;
     }
 
-    public ExtendedPrimitiveConverter(QuickGroupConverter quickGroupConverter, int i) {
-
-    }
+//    public ExtendedPrimitiveConverter(QuickGroupConverter quickGroupConverter, int i) {
+//
+//    }
 
 
     @Override
